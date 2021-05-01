@@ -13,27 +13,26 @@ import org.springframework.batch.core.configuration.annotation.StepBuilderFactor
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.configuration.support.JobRegistryBeanPostProcessor;
 import org.springframework.batch.item.ItemReader;
-import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.database.JpaItemWriter;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.LineMapper;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
-import org.springframework.batch.item.support.PassThroughItemProcessor;
-import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.PathResource;
 
+import javax.persistence.EntityManagerFactory;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 import java.util.function.Function;
 
 @Configuration
@@ -46,6 +45,10 @@ public class BatchJobConfiguration {
 
     @Autowired
     private ApplicationProperties applicationProperties;
+
+    @Autowired
+    @Qualifier(value="batchEntityManagerFactory")
+    private EntityManagerFactory batchEntityManagerFactory;
 
     @Bean
     JobRegistryBeanPostProcessor jobRegistryBeanPostProcessor(JobRegistry jobRegistry) {
@@ -86,13 +89,15 @@ public class BatchJobConfiguration {
     }
 
     @Bean
-    public Step step(ItemReader<PatientRecord> itemReader, Function<PatientRecord, PatientEntity> processor) throws Exception {
+    public Step step(ItemReader<PatientRecord> itemReader,
+                     Function<PatientRecord, PatientEntity> processor,
+                     JpaItemWriter<PatientEntity> writer) throws Exception {
         return this.stepBuilderFactory
             .get(Constants.STEP_NAME)
             .<PatientRecord, PatientEntity> chunk(2) // read 2 row at a time in chunk
             .reader(itemReader)
             .processor(processor)
-            .writer(writer())
+            .writer(writer)
             .build();
     }
 
@@ -146,11 +151,9 @@ public class BatchJobConfiguration {
 
     @Bean
     @StepScope
-    public ItemWriter<PatientEntity> writer() {
-        return items -> {
-            for (PatientEntity patientEntity : items) {
-                System.err.println("Writing item: " + patientEntity.toString());
-            }
-        };
+    public JpaItemWriter<PatientEntity> writer() {
+        JpaItemWriter<PatientEntity> writer = new JpaItemWriter<>();
+        writer.setEntityManagerFactory(batchEntityManagerFactory);
+        return writer;
     }
 }
