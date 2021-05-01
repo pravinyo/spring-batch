@@ -1,5 +1,6 @@
 package com.pluralsight.springbatch.patientbatchloader.config;
 
+import com.pluralsight.springbatch.patientbatchloader.domain.PatientEntity;
 import com.pluralsight.springbatch.patientbatchloader.domain.PatientRecord;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.batch.core.Job;
@@ -30,7 +31,10 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.function.Function;
 
 @Configuration
 public class BatchJobConfiguration {
@@ -82,12 +86,12 @@ public class BatchJobConfiguration {
     }
 
     @Bean
-    public Step step(ItemReader<PatientRecord> itemReader) throws Exception {
+    public Step step(ItemReader<PatientRecord> itemReader, Function<PatientRecord, PatientEntity> processor) throws Exception {
         return this.stepBuilderFactory
             .get(Constants.STEP_NAME)
-            .<PatientRecord, PatientRecord> chunk(2) // read 2 row at a time in chunk
+            .<PatientRecord, PatientEntity> chunk(2) // read 2 row at a time in chunk
             .reader(itemReader)
-            .processor(processor())
+            .processor(processor)
             .writer(writer())
             .build();
     }
@@ -124,16 +128,28 @@ public class BatchJobConfiguration {
 
     @Bean
     @StepScope
-    public PassThroughItemProcessor<PatientRecord> processor() {
-        return new PassThroughItemProcessor<>();
+    public Function<PatientRecord, PatientEntity> processor() {
+        return (patientRecord) -> new PatientEntity(
+            patientRecord.getSourceId(),
+            patientRecord.getFirstName(),
+            patientRecord.getMiddleInitial(),
+            patientRecord.getLastName(),
+            patientRecord.getEmailAddress(),
+            patientRecord.getPhoneNumber(),
+            patientRecord.getStreet(),
+            patientRecord.getCity(),
+            patientRecord.getState(),
+            patientRecord.getZip(),
+            LocalDate.parse(patientRecord.getBirthDate(), DateTimeFormatter.ofPattern("M/dd/yyyy")),
+            patientRecord.getSsn());
     }
 
     @Bean
     @StepScope
-    public ItemWriter<PatientRecord> writer() {
+    public ItemWriter<PatientEntity> writer() {
         return items -> {
-            for (PatientRecord patientRecord : items) {
-                System.err.println("Writing item: " + patientRecord.toString());
+            for (PatientEntity patientEntity : items) {
+                System.err.println("Writing item: " + patientEntity.toString());
             }
         };
     }
